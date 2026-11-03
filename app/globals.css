@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+@layer utilities {
+  .font-jakarta {
+    font-family: var(--font-jakarta), 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  .font-mono-code {
+    font-family: var(--font-mono-code), 'JetBrains Mono', monospace;
+  }
+
+  /* Subtle film grain texture overlay */
+  .bg-noise {
+    background-image: radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 0);
+    background-size: 24px 24px;
+  }
+
+  /* 3D Spiral Calendar Flip Animation */
+  .calendar-perspective {
+    perspective: 1200px;
+  }
+  .calendar-page-flip {
+    transform-origin: top center;
+    transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease;
+  }
+  .calendar-flipping {
+    transform: rotateX(-78deg) translateY(-6px) scale(0.98);
+    opacity: 0.15;
+  }
+
+  .rope-sway:hover {
+    animation: gentleSway 2.2s ease-in-out infinite;
+    transform-origin: top center;
+  }
+
+  .cursor-ring-spin {
+    animation: spinSlow 8s linear infinite;
+  }
+}
+
+@keyframes gentleSway {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(1.4deg); }
+  75% { transform: rotate(-1.4deg); }
+}
+
+@keyframes spinSlow {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
