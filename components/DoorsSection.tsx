@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence, useScroll, useTransform, MotionValue } from 'framer-motion';
+import React, { useState, useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
+import { motion, AnimatePresence, useScroll, useTransform, MotionValue } from 'motion/react';
 import { ArrowLeft, Check, ArrowUpRight } from 'lucide-react';
 import FooterCTA from '@/components/FooterCTA';
 
@@ -929,97 +929,91 @@ const DesktopMonitorMockup = ({
 };
 
 // ==========================================
-// SCROLL-DRIVEN STICKY STACKING PROJECT CARD
+// SCROLL-DRIVEN STICKY PARALLAX PROJECT CARD
 // ==========================================
+interface ProjectCardProps {
+  project: ServiceProject;
+  index: number;
+  totalCards: number;
+  scrollTop: number;
+  containerHeight: number;
+}
+
 const StickyProjectCard = ({
   project,
   index,
   totalCards,
-  containerProgress
-}: {
-  project: ServiceProject;
-  index: number;
-  totalCards: number;
-  containerProgress: MotionValue<number>;
-}) => {
+  scrollTop,
+  containerHeight,
+}: ProjectCardProps) => {
   const cardSlotRef = useRef<HTMLDivElement>(null);
   const isAlternated = index % 2 === 1;
+  // Comfortable clearance below floating navigation capsule (~68px bottom)
+  const stickyTopPx = 104 + index * 22;
 
-  const { scrollYProgress: entryProgress } = useScroll({
-    target: cardSlotRef,
-    offset: ['start end', 'start 90px']
+  const [cardTransform, setCardTransform] = useState({
+    scale: 1,
+    darkness: 0,
+    translateY: 0,
   });
 
-  const incomingScale = useTransform(
-    entryProgress,
-    [0, 1],
-    [index === 0 ? 1 : 0.96, 1]
-  );
+  // Calculate dynamic scale and darkening based on scroll position in effect
+  useEffect(() => {
+    if (!cardSlotRef.current || index >= totalCards - 1) return;
 
-  const stackStart = index / totalCards;
-  const targetMinScale = Math.max(0.9, 1 - (totalCards - 1 - index) * 0.028);
-  const targetTranslateY = -1 * (totalCards - 1 - index) * 8;
-  const targetBrightness = Math.max(0.62, 1 - (totalCards - 1 - index) * 0.14);
+    const rect = cardSlotRef.current.getBoundingClientRect();
+    const isPinned = rect.top <= stickyTopPx + 2;
 
-  const stackedScale = useTransform(
-    containerProgress,
-    [stackStart, 1],
-    [1, index === totalCards - 1 ? 1 : targetMinScale]
-  );
+    if (isPinned) {
+      const pastStick = Math.max(0, stickyTopPx - rect.top);
+      const overlapThreshold = Math.max(320, containerHeight * 0.52);
+      const progress = Math.min(1, Math.max(0, pastStick / overlapThreshold));
 
-  const stackedY = useTransform(
-    containerProgress,
-    [stackStart, 1],
-    [0, index === totalCards - 1 ? 0 : targetTranslateY]
-  );
-
-  const overlayDarkness = useTransform(
-    containerProgress,
-    [stackStart, 1],
-    [0, index === totalCards - 1 ? 0 : 1 - targetBrightness]
-  );
-
-  const combinedScale = useTransform(
-    [incomingScale, stackedScale],
-    (values: number[]) => (values[0] ?? 1) * (values[1] ?? 1)
-  );
-
-  const stickyTopPx = 82 + index * 16;
+      setCardTransform({
+        scale: 1 - progress * 0.055,
+        darkness: progress * 0.38,
+        translateY: -progress * 10,
+      });
+    } else {
+      setCardTransform({ scale: 1, darkness: 0, translateY: 0 });
+    }
+  }, [scrollTop, containerHeight, index, totalCards, stickyTopPx]);
 
   return (
     <div
       ref={cardSlotRef}
-      className="sticky w-full"
+      className="sticky w-full transition-all duration-150 ease-out will-change-transform"
       style={{
         top: `${stickyTopPx}px`,
-        zIndex: index + 1,
-        paddingBottom: index === totalCards - 1 ? '4vh' : '12vh'
+        zIndex: (index + 1) * 10,
+        marginBottom: index === totalCards - 1 ? '4vh' : '20vh',
       }}
     >
-      <motion.div
+      <div
         style={{
-          scale: combinedScale,
-          y: stackedY,
-          transformOrigin: 'top center'
+          transform: `scale(${cardTransform.scale}) translateY(${cardTransform.translateY}px)`,
+          transformOrigin: 'top center',
+          transition: 'transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1)',
         }}
-        className="relative w-full rounded-[26px] bg-[#21211f] border border-white/[0.09] px-7 py-10 sm:px-14 sm:py-14 md:px-16 md:py-16 shadow-[0_-22px_55px_rgba(0,0,0,0.88),0_30px_80px_rgba(0,0,0,0.78)] min-h-[520px] sm:min-h-[600px] flex items-center overflow-hidden will-change-transform"
+        className="relative w-full rounded-[24px] sm:rounded-[30px] bg-[#201f1d] border border-white/[0.09] px-6 py-9 sm:px-12 sm:py-12 md:px-14 md:py-14 shadow-[0_-18px_45px_rgba(0,0,0,0.85),0_28px_70px_rgba(0,0,0,0.75)] min-h-[500px] sm:min-h-[570px] flex items-center overflow-hidden will-change-transform"
       >
-        <motion.div
-          style={{ opacity: overlayDarkness }}
-          className="absolute inset-0 bg-black pointer-events-none z-20 rounded-[26px]"
+        {/* Subtle dark depth veil as card is pushed into background by incoming card */}
+        <div
+          style={{ opacity: cardTransform.darkness }}
+          className="absolute inset-0 bg-black pointer-events-none z-20 rounded-[24px] sm:rounded-[30px] transition-opacity duration-150"
         />
 
-        <div className="relative z-10 w-full grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-center">
+        <div className="relative z-10 w-full grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
           <div
             className={`lg:col-span-5 flex flex-col justify-center ${
-              isAlternated ? 'lg:order-2 lg:pl-4' : 'lg:order-1 lg:pr-2'
+              isAlternated ? 'lg:order-2 lg:pl-3' : 'lg:order-1 lg:pr-3'
             }`}
           >
-            <div className="text-[10.5px] tracking-[0.2em] uppercase text-white/60 font-semibold font-mono">
+            <div className="text-[10.5px] tracking-[0.2em] uppercase text-white/55 font-semibold font-mono">
               {project.category}
             </div>
 
-            <h2 className="mt-2.5 text-[32px] sm:text-[42px] font-bold tracking-[-0.025em] text-[#f4f2ed] leading-[1.08]">
+            <h2 className="mt-2.5 text-[30px] sm:text-[40px] font-bold tracking-[-0.025em] text-[#f4f2ed] leading-[1.08]">
               {project.name}
             </h2>
 
@@ -1027,7 +1021,7 @@ const StickyProjectCard = ({
               {project.subtitle}
             </div>
 
-            <p className="mt-5 text-[13.5px] sm:text-[14.5px] leading-[1.68] text-white/70 max-w-[440px]">
+            <p className="mt-4 sm:mt-5 text-[13.5px] sm:text-[14.5px] leading-[1.68] text-white/70 max-w-[440px]">
               {project.description}
             </p>
 
@@ -1049,7 +1043,7 @@ const StickyProjectCard = ({
                   target="_blank"
                   rel="noreferrer"
                   onClick={(e) => e.preventDefault()}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#e8e6e1] hover:bg-white text-[#141413] text-[12px] font-semibold tracking-tight transition shadow-md"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#e8e6e1] hover:bg-white text-[#141413] text-[12px] font-semibold tracking-tight transition shadow-md cursor-pointer"
                 >
                   <span>Visit live site</span>
                   <ArrowUpRight className="w-3.5 h-3.5" strokeWidth={2.4} />
@@ -1074,7 +1068,7 @@ const StickyProjectCard = ({
             />
           </div>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 };
@@ -1094,66 +1088,74 @@ export const DedicatedServicePage = ({
   onOpenContact?: () => void;
 }) => {
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [containerHeight, setContainerHeight] = useState(800);
+  const pageContainerRef = useRef<HTMLDivElement>(null);
   const cardsContainerRef = useRef<HTMLDivElement>(null);
-  const contactSectionRef = useRef<HTMLElement>(null);
-
-  const { scrollYProgress: containerProgress } = useScroll({
-    target: cardsContainerRef,
-    offset: ['start 90px', 'end end']
-  });
 
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: 'auto' });
+    // Scroll the dedicated service overlay container to top on mount / change
+    pageContainerRef.current?.scrollTo({ top: 0, behavior: 'instant' });
 
+    const containerEl = pageContainerRef.current;
+    if (!containerEl) return;
+
+    setContainerHeight(containerEl.clientHeight);
+
+    let rafId: number | null = null;
     const handleScroll = () => {
-      setShowScrollTop(window.scrollY > 360);
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        setScrollTop(containerEl.scrollTop);
+        setShowScrollTop(containerEl.scrollTop > 320);
+        rafId = null;
+      });
     };
 
-    window.addEventListener('scroll', handleScroll, { passive: true });
+    const handleResize = () => {
+      if (containerEl) setContainerHeight(containerEl.clientHeight);
+    };
+
+    containerEl.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', handleResize);
     handleScroll();
-    return () => window.removeEventListener('scroll', handleScroll);
+
+    return () => {
+      containerEl.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleResize);
+      if (rafId) cancelAnimationFrame(rafId);
+    };
   }, [service.id]);
 
-  const scrollToContact = () => {
-    if (onOpenContact) {
-      onOpenContact();
-    } else {
-      contactSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  };
-
   const scrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    pageContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-      className="min-h-screen w-full bg-[#181817] text-[#f3f2ee] relative"
+    <div
+      ref={pageContainerRef}
+      className="w-full h-[100dvh] min-h-[100dvh] overflow-y-auto overflow-x-hidden bg-[#181817] text-[#f3f2ee] scroll-smooth"
     >
-      {/* SECTION INTRODUCTION (Top spacing aligned with global floating capsule navbar) */}
-      <div className="relative z-10 max-w-[1180px] mx-auto px-5 sm:px-8 pt-24 sm:pt-28 md:pt-32">
+      {/* SECTION INTRODUCTION: Generous top spacing below floating capsule navbar & deliberate bottom gap before first card */}
+      <div className="relative z-10 max-w-[1240px] mx-auto px-6 sm:px-10 lg:px-12 pt-32 sm:pt-36 md:pt-40 lg:pt-44">
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.08, duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-          className="mb-10 sm:mb-14"
+          className="mb-16 sm:mb-20 md:mb-24 lg:mb-28"
         >
-          <h1 className="text-[46px] sm:text-[68px] md:text-[80px] font-bold tracking-[-0.035em] leading-[1.0] text-[#f2f0ec]">
+          <h1 className="text-[40px] sm:text-[56px] md:text-[68px] lg:text-[78px] font-bold tracking-[-0.035em] leading-[1.04] text-[#f2f0ec]">
             {service.title}
           </h1>
-          <p className="mt-4 sm:mt-5 text-[13.5px] sm:text-[15px] text-white/65 max-w-[460px] leading-[1.6] font-normal">
+          <p className="mt-5 sm:mt-6 text-[14px] sm:text-[15.5px] text-white/65 max-w-[500px] leading-[1.65] font-normal">
             {service.shortDesc}
           </p>
         </motion.div>
 
-        {/* 3. SCROLL-DRIVEN OVERLAPPING PARALLAX PROJECT CARDS */}
+        {/* SCROLL-DRIVEN OVERLAPPING PARALLAX PROJECT CARDS (Section 4) */}
         <div
           ref={cardsContainerRef}
-          className="relative w-full pb-8 sm:pb-14"
+          className="relative w-full pb-20 sm:pb-28"
         >
           {service.projects.map((project, idx) => (
             <StickyProjectCard
@@ -1161,24 +1163,25 @@ export const DedicatedServicePage = ({
               project={project}
               index={idx}
               totalCards={service.projects.length}
-              containerProgress={containerProgress}
+              scrollTop={scrollTop}
+              containerHeight={containerHeight}
             />
           ))}
         </div>
       </div>
 
-      {/* 4. FOOTER & CTA SECTION MATCHING SCREENSHOT */}
+      {/* FOOTER & CTA SECTION */}
       <FooterCTA
         onSelectService={onSelectOtherService}
       />
 
-      {/* FIXED BOTTOM-LEFT "Back to the doors" PILL */}
+      {/* FIXED BOTTOM-LEFT "Back to the doors" PILL (Section 5) */}
       <motion.button
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.35 }}
         onClick={onBack}
-        className="fixed bottom-6 left-6 z-50 px-4 py-2.5 rounded-full bg-[#222220]/90 hover:bg-[#2c2c29] text-white/85 hover:text-white border border-white/[0.12] shadow-[0_10px_30px_rgba(0,0,0,0.65)] backdrop-blur-md flex items-center gap-2 text-[12px] font-medium transition-all group cursor-pointer"
+        className="fixed bottom-6 left-6 z-50 px-4 py-2.5 rounded-full bg-[#222220]/90 hover:bg-[#2c2c29] text-white/90 hover:text-white border border-white/[0.12] shadow-[0_10px_30px_rgba(0,0,0,0.65)] backdrop-blur-md flex items-center gap-2 text-[12px] font-medium transition-all group cursor-pointer"
       >
         <ArrowLeft className="w-3.5 h-3.5 text-white/70 group-hover:-translate-x-0.5 transition-transform" />
         <span>Back to the doors</span>
@@ -1199,142 +1202,313 @@ export const DedicatedServicePage = ({
           </motion.button>
         )}
       </AnimatePresence>
-    </motion.div>
+    </div>
   );
 };
 
 // ==========================================
+// COMPONENT HANDLES & PROPS
+// ==========================================
+export interface DoorsSectionHandle {
+  openService: (serviceId: string) => void;
+  backToDoors: () => void;
+}
+
 export interface DoorsSectionProps {
-  onServiceOpened?: (serviceId: string) => void;
+  activeServiceId?: string | null;
+  onActiveServiceChange?: (serviceId: string | null) => void;
+  onServiceOpened?: (serviceId: string, cameraCoords?: { x: number; y: number; z: number }) => void;
+}
+
+// 3D Viewport coordinate & scale calculation for doorway camera alignment
+export interface CameraFlightState {
+  x: number;
+  y: number;
+  scale: number;
+  originX: number;
+  originY: number;
+}
+
+export function computeDoorCameraCoords(
+  index: number,
+  doorEl?: HTMLElement | null,
+  containerEl?: HTMLElement | null
+): CameraFlightState {
+  const isBrowser = typeof window !== 'undefined';
+  const vpW = isBrowser ? window.innerWidth : 1200;
+  const vpH = isBrowser ? window.innerHeight : 800;
+
+  if (doorEl && containerEl) {
+    const doorRect = doorEl.getBoundingClientRect();
+    const containerRect = containerEl.getBoundingClientRect();
+
+    // Center of clicked door in container pixel coordinates
+    const doorCenterX = doorRect.left - containerRect.left + doorRect.width * 0.5;
+    const doorCenterY = doorRect.top - containerRect.top + doorRect.height * 0.46;
+
+    // Viewport center in container pixel coordinates
+    const vpCenterX = containerRect.width * 0.5;
+    const vpCenterY = containerRect.height * 0.5;
+
+    // Pan required to align the door center directly with viewport center
+    const panX = vpCenterX - doorCenterX;
+    const panY = vpCenterY - doorCenterY;
+
+    // Scale factor so the doorway opening cleanly covers the entire viewport in both axes
+    const scaleX = vpW / (doorRect.width * 0.78);
+    const scaleY = vpH / (doorRect.height * 0.78);
+    const scaleFactor = Math.max(7.2, Math.min(10.5, Math.max(scaleX, scaleY)));
+
+    return {
+      x: panX,
+      y: panY,
+      scale: scaleFactor,
+      originX: doorCenterX,
+      originY: doorCenterY,
+    };
+  }
+
+  // Geometric fallback based on responsive layout
+  const fallbackPans = [380, 125, -125, -380];
+  return {
+    x: fallbackPans[index] ?? 0,
+    y: 0,
+    scale: 7.5,
+    originX: vpW * 0.5,
+    originY: vpH * 0.5,
+  };
 }
 
 // ==========================================
 // MAIN INTERACTIVE FOUR-DOOR COMPONENT
 // ==========================================
-export default function DoorsSection({ onServiceOpened }: DoorsSectionProps = {}) {
+const DoorsSection = forwardRef<DoorsSectionHandle, DoorsSectionProps>(function DoorsSection(
+  { onActiveServiceChange, onServiceOpened }: DoorsSectionProps,
+  ref
+) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  const [idleHintIndex] = useState<number>(2);
-  const [phase, setPhase] = useState<'idle' | 'entering' | 'page'>('idle');
+  const [phase, setPhase] = useState<
+    'idle' | 'opening' | 'entering' | 'blackout' | 'page' | 'exiting_camera' | 'exiting_door'
+  >('idle');
   const [selectedDoorIndex, setSelectedDoorIndex] = useState<number | null>(null);
-  const [cameraTarget, setCameraTarget] = useState({
-    originX: '50%',
-    originY: '58%',
-    panX: 0,
-    panY: 0,
-    scale: 11
+  const [unlatchingIndex, setUnlatchingIndex] = useState<number | null>(null);
+  const [cameraFlight, setCameraFlight] = useState<CameraFlightState>({
+    x: 0,
+    y: 0,
+    scale: 1,
+    originX: 0,
+    originY: 0,
   });
+  const [veilOpacity, setVeilOpacity] = useState<number>(0);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const doorRefs = useRef<(HTMLDivElement | null)[]>([]);
-  const enterTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const timersRef = useRef<NodeJS.Timeout[]>([]);
+  const transitionLockRef = useRef<boolean>(false);
 
+  const clearAllTimers = () => {
+    timersRef.current.forEach((t) => clearTimeout(t));
+    timersRef.current = [];
+  };
+
+  useEffect(() => {
+    return () => {
+      clearAllTimers();
+      transitionLockRef.current = false;
+      document.body.style.overflow = '';
+    };
+  }, []);
+
+  // Lock body scroll while reading the full-screen service page overlay
+  useEffect(() => {
+    if (phase === 'page') {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+  }, [phase]);
+
+  // Initial deep link support (#web-development, etc.)
+  useEffect(() => {
+    const hash = window.location.hash.replace('#', '');
+    const foundIdx = SERVICES.findIndex((s) => s.id === hash);
+    if (foundIdx !== -1 && phase === 'idle' && selectedDoorIndex === null) {
+      const flight = computeDoorCameraCoords(
+        foundIdx,
+        doorRefs.current[foundIdx],
+        containerRef.current
+      );
+      setCameraFlight(flight);
+      setSelectedDoorIndex(foundIdx);
+      setPhase('page');
+      if (onActiveServiceChange) {
+        onActiveServiceChange(SERVICES[foundIdx].id);
+      }
+      containerRef.current?.scrollIntoView({ behavior: 'instant', block: 'start' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Browser history popstate (Back/Forward buttons)
   useEffect(() => {
     const handlePopState = () => {
       const hash = window.location.hash.replace('#', '');
-      const foundIndex = SERVICES.findIndex((s) => s.id === hash);
-      if (foundIndex !== -1) {
-        if (onServiceOpened) {
-          onServiceOpened(SERVICES[foundIndex].id);
-        } else {
-          setSelectedDoorIndex(foundIndex);
-          setPhase('page');
+      const foundIdx = SERVICES.findIndex((s) => s.id === hash);
+      if (foundIdx !== -1) {
+        if (selectedDoorIndex !== foundIdx) {
+          handleDoorClick(foundIdx);
         }
       } else {
-        setPhase('idle');
-        setSelectedDoorIndex(null);
+        if (phase === 'page') {
+          handleBackToDoors();
+        }
       }
     };
     window.addEventListener('popstate', handlePopState);
-    return () => {
-      window.removeEventListener('popstate', handlePopState);
-      if (enterTimerRef.current) clearTimeout(enterTimerRef.current);
-    };
-  }, [onServiceOpened]);
+    return () => window.removeEventListener('popstate', handlePopState);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, selectedDoorIndex]);
 
-  const handleDoorClick = (index: number) => {
-    if (phase !== 'idle') return;
-
-    const doorEl = doorRefs.current[index];
-    const sectionEl = containerRef.current;
-
-    if (doorEl && sectionEl) {
-      const doorRect = doorEl.getBoundingClientRect();
-      const sectionRect = sectionEl.getBoundingClientRect();
-
-      const portalXInSection = doorRect.left - sectionRect.left + doorRect.width * 0.60;
-      const portalYInSection = doorRect.top - sectionRect.top + doorRect.height * 0.63;
-
-      const originXPercent = (portalXInSection / sectionRect.width) * 100;
-      const originYPercent = (portalYInSection / sectionRect.height) * 100;
-
-      const viewportCenterX = sectionRect.width * 0.5;
-      const viewportCenterY = sectionRect.height * 0.56;
-      const deltaX = (viewportCenterX - portalXInSection) * 0.35;
-      const deltaY = (viewportCenterY - portalYInSection) * 0.25;
-
-      const blackOpeningWidth = Math.max(doorRect.width * 0.52, 80);
-      const requiredScale = Math.max(
-        (window.innerWidth / blackOpeningWidth) * 1.65,
-        10.5
-      );
-
-      setCameraTarget({
-        originX: `${originXPercent.toFixed(2)}%`,
-        originY: `${originYPercent.toFixed(2)}%`,
-        panX: deltaX,
-        panY: deltaY,
-        scale: requiredScale
-      });
-    } else {
-      const fallbackX = [19, 40, 60, 81][index] || 50;
-      setCameraTarget({
-        originX: `${fallbackX}%`,
-        originY: '62%',
-        panX: 0,
-        panY: 0,
-        scale: 11.5
-      });
+  // Expose imperative control for Navbar and Hero Section buttons
+  useImperativeHandle(ref, () => ({
+    openService: (serviceId: string) => {
+      const idx = SERVICES.findIndex((s) => s.id === serviceId);
+      if (idx !== -1) {
+        if (phase === 'page') {
+          handleSwitchServiceDirectly(serviceId);
+        } else if (phase === 'idle') {
+          containerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          setTimeout(() => {
+            handleDoorClick(idx);
+          }, 350);
+        }
+      }
+    },
+    backToDoors: () => {
+      if (phase === 'page') {
+        handleBackToDoors();
+      }
     }
+  }));
+
+  function handleDoorClick(index: number) {
+    // Guard against clicks during active transition
+    if (transitionLockRef.current || phase !== 'idle') return;
+    transitionLockRef.current = true;
+
+    const flight = computeDoorCameraCoords(
+      index,
+      doorRefs.current[index],
+      containerRef.current
+    );
+    setCameraFlight(flight);
 
     setSelectedDoorIndex(index);
     setHoveredIndex(null);
-    setPhase('entering');
+    setUnlatchingIndex(index);
+    setPhase('opening');
+    setVeilOpacity(0);
 
-    if (enterTimerRef.current) clearTimeout(enterTimerRef.current);
+    clearAllTimers();
 
-    enterTimerRef.current = setTimeout(() => {
+    // Stage 1: Lever handle depression (0ms - 200ms)
+    const t1 = setTimeout(() => {
+      setUnlatchingIndex(null);
+    }, 200);
+    timersRef.current.push(t1);
+
+    // Stage 2: Gate reaches open position; camera begins moving FORWARD through the open doorway (650ms)
+    const t2 = setTimeout(() => {
+      setPhase('entering');
+    }, 650);
+    timersRef.current.push(t2);
+
+    // Stage 3: Camera passes through doorway; black veil fades in (1350ms)
+    const t3 = setTimeout(() => {
+      setPhase('blackout');
+      setVeilOpacity(1);
+    }, 1350);
+    timersRef.current.push(t3);
+
+    // Stage 4: Screen is 100% solid pitch black; mount service page overlay and fade out veil (1680ms)
+    const t4 = setTimeout(() => {
       const serviceId = SERVICES[index].id;
+      setPhase('page');
+      setVeilOpacity(0);
+      transitionLockRef.current = false;
+      if (onActiveServiceChange) {
+        onActiveServiceChange(serviceId);
+      }
       if (onServiceOpened) {
         onServiceOpened(serviceId);
-        setPhase('idle');
-      } else {
-        try {
-          window.history.pushState({ serviceId }, '', `#${serviceId}`);
-        } catch {
-          // Ignore history restrictions
-        }
-        setPhase('page');
       }
-    }, 1850);
-  };
+      try {
+        window.history.pushState({ serviceId }, '', `#${serviceId}`);
+      } catch {
+        // Ignore
+      }
+    }, 1680);
+    timersRef.current.push(t4);
+  }
 
-  const handleBackToDoors = () => {
-    if (enterTimerRef.current) clearTimeout(enterTimerRef.current);
+  function handleBackToDoors() {
+    if (transitionLockRef.current) return;
+    transitionLockRef.current = true;
+    clearAllTimers();
+
+    if (onActiveServiceChange) {
+      onActiveServiceChange(null);
+    }
     try {
       window.history.pushState({}, '', window.location.pathname);
     } catch {
       // Ignore
     }
-    setPhase('idle');
-    setSelectedDoorIndex(null);
-    setHoveredIndex(null);
-  };
+
+    // PHASE 1: Fade service page smoothly to solid pitch black (0ms - 320ms)
+    setVeilOpacity(1);
+
+    // PHASE 2: At 320ms, screen is 100% solid pitch black!
+    // Unmount service page overlay.
+    // Ensure viewport is anchored directly to the four gates!
+    const t1 = setTimeout(() => {
+      containerRef.current?.scrollIntoView({ behavior: 'instant', block: 'start' });
+      setPhase('exiting_camera');
+      setVeilOpacity(0); // Fade out veil to reveal open doorway interior
+
+      // PHASE 3: Camera moves BACKWARDS through the doorway (0ms to 920ms)
+      // Selected door remains firmly open at 80deg while camera pulls backward
+      const t2 = setTimeout(() => {
+        // PHASE 4: Camera arrives at normal view; now the selected gate rotates closed!
+        setPhase('exiting_door');
+
+        // PHASE 5: Door finishes swinging closed (0ms to 650ms)
+        const t3 = setTimeout(() => {
+          setPhase('idle');
+          setSelectedDoorIndex(null);
+          setCameraFlight({ x: 0, y: 0, scale: 1, originX: 0, originY: 0 });
+          transitionLockRef.current = false;
+        }, 650);
+        timersRef.current.push(t3);
+      }, 920);
+      timersRef.current.push(t2);
+    }, 320);
+    timersRef.current.push(t1);
+  }
 
   const handleSwitchServiceDirectly = (serviceId: string) => {
     const idx = SERVICES.findIndex((s) => s.id === serviceId);
     if (idx !== -1) {
       setSelectedDoorIndex(idx);
       setPhase('page');
+      if (onActiveServiceChange) {
+        onActiveServiceChange(serviceId);
+      }
+      try {
+        window.history.pushState({ serviceId }, '', `#${serviceId}`);
+      } catch {
+        // Ignore
+      }
     }
   };
 
@@ -1345,435 +1519,438 @@ export default function DoorsSection({ onServiceOpened }: DoorsSectionProps = {}
     return { left: '46%' };
   };
 
+  // Camera flight phase flags
+  const isCameraEntering = phase === 'entering' || phase === 'blackout' || phase === 'page';
+  const isCameraExiting = phase === 'exiting_camera';
+
   return (
-    <div id="doors" className="w-full bg-[#181715] text-[#f4f2ed] font-sans antialiased selection:bg-amber-200 selection:text-black">
-      <AnimatePresence mode="wait">
-        {phase === 'page' && selectedDoorIndex !== null ? (
-          <DedicatedServicePage
-            key="service-page"
-            service={SERVICES[selectedDoorIndex]}
-            onBack={handleBackToDoors}
-            onSelectOtherService={handleSwitchServiceDirectly}
-          />
-        ) : (
-          <motion.section
-            key="doors-hallway"
-            ref={containerRef}
-            initial={{ opacity: 0, scale: 1, x: 0, y: 0 }}
-            animate={
-              phase === 'entering'
-                ? {
-                    scale: cameraTarget.scale,
-                    x: cameraTarget.panX,
-                    y: cameraTarget.panY,
-                    opacity: 1
-                  }
-                : {
-                    scale: 1,
-                    x: 0,
-                    y: 0,
-                    opacity: 1
-                  }
-            }
-            exit={{
-              opacity: 0,
-              transition: { duration: 0.1 }
-            }}
-            transition={
-              phase === 'entering'
-                ? {
-                    scale: {
-                      delay: 0.55,
-                      duration: 1.25,
-                      ease: [0.55, 0.0, 0.2, 1]
-                    },
-                    x: {
-                      delay: 0.55,
-                      duration: 1.18,
-                      ease: [0.45, 0.0, 0.2, 1]
-                    },
-                    y: {
-                      delay: 0.55,
-                      duration: 1.18,
-                      ease: [0.45, 0.0, 0.2, 1]
-                    }
-                  }
-                : { duration: 0.45, ease: [0.22, 1, 0.36, 1] }
-            }
+    <div id="doors" className="w-full bg-[#181715] text-[#f4f2ed] font-sans antialiased selection:bg-amber-200 selection:text-black relative">
+      {/* 1. CONTINUOUS 3D GATE ENTRANCE SCENE: Full viewport height (100dvh) with centered perspective */}
+      <section
+        ref={containerRef}
+        className="relative w-full h-[100dvh] min-h-[100dvh] bg-[#181715] flex flex-col justify-between items-center overflow-hidden select-none"
+        style={{
+          perspective: '1200px',
+          perspectiveOrigin: '50% 50%',
+        }}
+      >
+        {/* 3D CAMERA VIEWPOINT RIG: Moves forward and backward through the open doorway along the depth axis */}
+        <motion.div
+          animate={
+            isCameraEntering
+              ? {
+                  x: cameraFlight.x,
+                  y: cameraFlight.y,
+                  scale: cameraFlight.scale,
+                }
+              : {
+                  x: 0,
+                  y: 0,
+                  scale: 1,
+                }
+          }
+          transition={
+            isCameraEntering
+              ? {
+                  duration: 0.92,
+                  ease: [0.35, 0, 0.2, 1],
+                }
+              : isCameraExiting
+              ? {
+                  duration: 0.88,
+                  ease: [0.22, 1, 0.36, 1],
+                }
+              : {
+                  duration: 0.45,
+                  ease: [0.22, 1, 0.36, 1],
+                }
+          }
+          style={{
+            transformOrigin:
+              cameraFlight.originX && cameraFlight.originY
+                ? `${cameraFlight.originX}px ${cameraFlight.originY}px`
+                : '50% 50%',
+            transformStyle: 'preserve-3d',
+          }}
+          className="w-full h-full flex flex-col justify-between items-center relative will-change-transform"
+        >
+          {/* BACKGROUND WALL LIGHTING & VIGNETTE */}
+          <div
+            className="absolute inset-0 pointer-events-none transition-all duration-700"
             style={{
-              transformOrigin: `${cameraTarget.originX} ${cameraTarget.originY}`,
-              perspective: '1400px'
+              background:
+                hoveredIndex !== null
+                  ? `radial-gradient(ellipse 65% 55% at 50% 48%, #2b2825 0%, #1c1b19 55%, #131211 100%)`
+                  : 'radial-gradient(ellipse 70% 60% at 50% 48%, #2a2825 0%, #1f1e1c 58%, #151413 100%)'
             }}
-            className={`min-h-screen w-full bg-[#1e1d1b] flex flex-col justify-between overflow-hidden select-none will-change-transform border-t border-white/[0.08] ${
-              phase === 'entering' ? 'fixed inset-0 z-50' : 'relative'
-            }`}
-          >
-            {/* BACKGROUND WALL LIGHTING & VIGNETTE */}
-            <div
-              className="absolute inset-0 pointer-events-none transition-all duration-700"
+          />
+
+          {/* MAIN HEADING: "Magic happens behind the doors" with clearance below floating navbar */}
+          <div className="relative z-20 pt-16 sm:pt-20 md:pt-24 pb-2 px-4 text-center pointer-events-none">
+            <h2
+              className="text-[32px] sm:text-[44px] md:text-[52px] font-bold tracking-[-0.03em] text-[#f2f0ec] leading-tight text-center drop-shadow-md"
               style={{
-                background:
-                  hoveredIndex !== null
-                    ? `radial-gradient(ellipse 65% 55% at 50% 48%, #2b2825 0%, #1c1b19 55%, #131211 100%)`
-                    : 'radial-gradient(ellipse 70% 60% at 50% 48%, #2a2825 0%, #1f1e1c 58%, #151413 100%)'
+                textShadow: '0 8px 28px rgba(0,0,0,0.55)'
               }}
-            />
-
-            <div className="relative z-20 w-full h-[14px] bg-gradient-to-b from-black/75 to-transparent pointer-events-none" />
-
-            {/* MAIN HEADING: "Magic happens behind the doors" */}
-            <motion.div
-              animate={{
-                opacity: hoveredIndex !== null ? 0.92 : 1
-              }}
-              transition={{ duration: 0.45, ease: 'easeOut' }}
-              className="relative z-20 pt-8 sm:pt-10 md:pt-12 pb-2 sm:pb-3 px-4 text-center"
             >
-              <h2
-                className="text-[36px] sm:text-[54px] md:text-[68px] font-bold tracking-[-0.03em] text-[#f2f0ec] leading-[1.05]"
-                style={{
-                  textShadow: '0 8px 28px rgba(0,0,0,0.55)'
-                }}
-              >
-                Magic happens behind the doors
-              </h2>
-            </motion.div>
+              Magic happens behind the doors
+            </h2>
+          </div>
 
-            {/* FOUR ARCHED DOORS STAGE + SYNCHRONIZED HOVER PANEL */}
-            <div className="relative z-20 w-full max-w-[1260px] mx-auto px-4 sm:px-8 flex-1 flex flex-col justify-end">
-              <div
-                onMouseLeave={() => {
-                  if (phase === 'idle') setHoveredIndex(null);
-                }}
-                className="relative w-full grid grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-7 md:gap-9 items-end pt-2 sm:pt-4"
-              >
-                {SERVICES.map((service, index) => {
-                  const isAnyHovered = hoveredIndex !== null;
-                  const isThisHovered = hoveredIndex === index;
-                  const isOpeningThis = phase === 'entering' && selectedDoorIndex === index;
-                  const isSelectedSequence = isOpeningThis;
-                  const isDimmedByHover = isAnyHovered && !isThisHovered && phase === 'idle';
+          {/* FOUR ARCHED DOORS STAGE + SYNCHRONIZED HOVER PANEL */}
+          <div className="relative z-20 w-full max-w-[1260px] mx-auto px-4 sm:px-8 flex flex-col justify-end">
+            <div
+              onMouseLeave={() => {
+                if (phase === 'idle' && !transitionLockRef.current) setHoveredIndex(null);
+              }}
+              className="relative w-full grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 md:gap-8 items-end"
+            >
+              {SERVICES.map((service, index) => {
+                const isAnyHovered = hoveredIndex !== null;
+                const isThisHovered = hoveredIndex === index && phase === 'idle';
+                const isSelected = selectedDoorIndex === index;
+                const isOpeningThis = isSelected && (phase === 'opening' || phase === 'entering' || phase === 'blackout');
+                const isExitingCameraThis = isSelected && phase === 'exiting_camera';
+                const isExitingDoorThis = isSelected && phase === 'exiting_door';
+                const isDoorHeldOpen = isOpeningThis || isExitingCameraThis;
+                const isDimmedByHover = isAnyHovered && !isThisHovered && phase === 'idle';
 
-                  const isHardwareBright =
-                    isThisHovered ||
-                    phase === 'entering' ||
-                    (!isAnyHovered && (index === 2 || index === 3));
+                const isHardwareBright =
+                  isThisHovered ||
+                  isDoorHeldOpen ||
+                  (!isAnyHovered && phase === 'idle' && (index === 2 || index === 3));
 
-                  return (
+                const isUnlatching = unlatchingIndex === index;
+
+                return (
+                  <div
+                    key={service.id}
+                    className="relative flex flex-col items-center justify-end"
+                    style={{
+                      zIndex: isSelected ? 40 : isThisHovered ? 30 : 10
+                    }}
+                  >
+                    {/* DOOR FRAME: Stays STATIONARY during door open and camera flight (Section 2) */}
                     <div
-                      key={service.id}
-                      className="relative flex flex-col items-center justify-end"
+                      ref={(el) => {
+                        doorRefs.current[index] = el;
+                      }}
+                      onMouseEnter={() => {
+                        if (phase === 'idle' && !transitionLockRef.current) {
+                          setHoveredIndex(index);
+                        }
+                      }}
+                      onClick={() => handleDoorClick(index)}
+                      className="relative w-full max-w-[275px] h-[440px] sm:h-[490px] md:h-[530px] lg:h-[570px] max-h-[64vh] rounded-t-full p-[9px] sm:p-[12px] pb-0 cursor-pointer group will-change-transform transition-all duration-300"
                       style={{
-                        zIndex: isThisHovered || isSelectedSequence ? 30 : 10
+                        background:
+                          'linear-gradient(180deg, #3d3b37 0%, #2c2927 45%, #22201e 100%)',
+                        boxShadow:
+                          isThisHovered || isDoorHeldOpen
+                            ? `0 -12px 35px rgba(0,0,0,0.85), 0 24px 60px rgba(0,0,0,0.92), 0 0 38px ${service.ambientGlow}, inset 0 2px 2px rgba(255,255,255,0.18)`
+                            : '0 12px 32px rgba(0,0,0,0.75), inset 0 1px 1px rgba(255,255,255,0.08)',
+                        border: '1px solid #171615',
+                        borderBottom: 'none',
+                        opacity: isDimmedByHover ? 0.22 : 1,
+                        filter: isDimmedByHover ? 'brightness(0.6) contrast(0.9)' : 'none',
                       }}
                     >
-                      <motion.div
-                        ref={(el) => {
-                          doorRefs.current[index] = el;
-                        }}
-                        onMouseEnter={() => {
-                          if (phase === 'idle') {
-                            setHoveredIndex(index);
-                          }
-                        }}
-                        onClick={() => handleDoorClick(index)}
-                        animate={{
-                          opacity: isDimmedByHover ? 0.16 : 1,
-                          scale: isDimmedByHover ? 0.985 : isThisHovered ? 1.01 : 1,
-                          y: isThisHovered ? -3 : 0,
-                          filter: isDimmedByHover
-                            ? 'brightness(0.5) contrast(0.88) blur(1px)'
-                            : 'brightness(1) contrast(1) blur(0px)'
-                        }}
-                        transition={{
-                          type: 'spring',
-                          stiffness: 170,
-                          damping: 24,
-                          mass: 0.85
-                        }}
-                        className="relative w-full max-w-[275px] h-[440px] sm:h-[530px] md:h-[590px] rounded-t-full p-[9px] sm:p-[12px] pb-0 cursor-pointer group will-change-transform"
+                      <div
+                        className="relative w-full h-full rounded-t-full p-[6px] pb-0 bg-[#000000] overflow-visible"
                         style={{
-                          background:
-                            'linear-gradient(180deg, #3d3b37 0%, #2c2927 45%, #22201e 100%)',
-                          boxShadow:
-                            isThisHovered || isSelectedSequence
-                              ? `0 -12px 35px rgba(0,0,0,0.85), 0 24px 60px rgba(0,0,0,0.92), 0 0 38px ${service.ambientGlow}, inset 0 2px 2px rgba(255,255,255,0.18)`
-                              : '0 12px 32px rgba(0,0,0,0.75), inset 0 1px 1px rgba(255,255,255,0.08)',
-                          border: '1px solid #171615',
+                          perspective: '1150px',
+                          perspectiveOrigin: '50% 52%',
+                          border: '2px solid #141312',
                           borderBottom: 'none'
                         }}
                       >
-                        <div
-                          className="relative w-full h-full rounded-t-full p-[6px] pb-0 bg-[#000000] overflow-visible"
-                          style={{
-                            perspective: '1150px',
-                            perspectiveOrigin: '50% 52%',
-                            border: '2px solid #141312',
-                            borderBottom: 'none'
+                        {/* 3D HINGED DOOR LEAF: Rotates around actual hinge (0% 50%) INWARD (Section 2) */}
+                        <motion.div
+                          initial={
+                            (isExitingCameraThis || isExitingDoorThis) ? { rotateY: 80 } : false
+                          }
+                          animate={{
+                            rotateY: isDoorHeldOpen ? 80 : isThisHovered ? 8 : 0
                           }}
+                          transition={
+                            isOpeningThis
+                              ? {
+                                  duration: 0.65,
+                                  ease: [0.22, 1, 0.36, 1]
+                                }
+                              : isExitingDoorThis
+                              ? {
+                                  duration: 0.65,
+                                  ease: [0.22, 1, 0.36, 1]
+                                }
+                              : {
+                                  type: 'spring',
+                                  stiffness: 185,
+                                  damping: 22,
+                                  mass: 0.85
+                                }
+                          }
+                          style={{
+                            transformOrigin: '0% 50%',
+                            transformStyle: 'preserve-3d',
+                            backgroundColor: service.color,
+                            boxShadow: isDoorHeldOpen
+                              ? '24px 12px 42px rgba(0,0,0,0.98), inset 0 2px 3px rgba(255,255,255,0.18)'
+                              : isThisHovered
+                              ? `14px 14px 28px rgba(0,0,0,0.88), 0 0 25px ${service.ambientGlow}, inset 0 2px 3px rgba(255,255,255,0.24)`
+                              : 'inset 0 2px 4px rgba(255,255,255,0.12), inset 0 -10px 25px rgba(0,0,0,0.45)'
+                          }}
+                          className="relative z-20 w-full h-full rounded-t-full p-[10px] sm:p-[14px] pb-0 flex flex-col items-center will-change-transform"
                         >
-                          {/* 3D HINGED DOOR LEAF */}
-                          <motion.div
-                            animate={{
-                              rotateY: isOpeningThis ? -74 : isThisHovered ? -9 : 0
-                            }}
-                            transition={
-                              isOpeningThis
-                                ? {
-                                    duration: 1.25,
-                                    ease: [0.22, 0.68, 0.18, 1]
-                                  }
-                                : {
-                                    type: 'spring',
-                                    stiffness: 185,
-                                    damping: 22,
-                                    mass: 0.85
-                                  }
-                            }
+                          <div
+                            className="relative w-full h-full rounded-t-full overflow-hidden flex flex-col items-center"
                             style={{
-                              transformOrigin: '0% 50%',
-                              transformStyle: 'preserve-3d',
-                              backgroundColor: service.color,
-                              boxShadow: isOpeningThis
-                                ? '24px 12px 42px rgba(0,0,0,0.98), inset 0 2px 3px rgba(255,255,255,0.18)'
-                                : isThisHovered
-                                ? `14px 14px 28px rgba(0,0,0,0.88), 0 0 25px ${service.ambientGlow}, inset 0 2px 3px rgba(255,255,255,0.24)`
-                                : 'inset 0 2px 4px rgba(255,255,255,0.12), inset 0 -10px 25px rgba(0,0,0,0.45)'
+                              border: `3px solid ${service.borderColor}`,
+                              borderBottom: 'none',
+                              boxShadow:
+                                'inset 0 4px 12px rgba(0,0,0,0.6), 0 1px 0 rgba(255,255,255,0.1)'
                             }}
-                            className="relative z-20 w-full h-full rounded-t-full p-[10px] sm:p-[14px] pb-0 flex flex-col items-center will-change-transform"
                           >
                             <div
-                              className="relative w-full h-full rounded-t-full overflow-hidden flex flex-col items-center"
+                              className="absolute inset-0 pointer-events-none opacity-90"
                               style={{
-                                border: `3px solid ${service.borderColor}`,
-                                borderBottom: 'none',
-                                boxShadow:
-                                  'inset 0 4px 12px rgba(0,0,0,0.6), 0 1px 0 rgba(255,255,255,0.1)'
-                              }}
-                            >
-                              <div
-                                className="absolute inset-0 pointer-events-none opacity-90"
-                                style={{
-                                  backgroundImage: `repeating-linear-gradient(
-                                    90deg,
-                                    rgba(255,255,255,0.045) 0px,
-                                    rgba(255,255,255,0.045) 3px,
-                                    rgba(0,0,0,0.26) 3px,
-                                    rgba(0,0,0,0.26) 6px,
-                                    transparent 6px,
-                                    transparent 9px
-                                  )`
-                                }}
-                              />
-
-                              <motion.div
-                                animate={{
-                                  opacity: isOpeningThis
-                                    ? 0.55
-                                    : isThisHovered
-                                    ? 1
-                                    : isHardwareBright
-                                    ? 0.75
-                                    : 0.35
-                                }}
-                                transition={{ duration: 0.6 }}
-                                className="absolute inset-0 pointer-events-none"
-                                style={{
-                                  background:
-                                    'radial-gradient(ellipse 90% 55% at 50% 22%, rgba(255,246,220,0.22) 0%, transparent 72%)'
-                                }}
-                              />
-
-                              <motion.div
-                                animate={{
-                                  opacity: isOpeningThis ? 0.35 : 0
-                                }}
-                                transition={{ duration: 0.9 }}
-                                className="absolute inset-0 pointer-events-none bg-gradient-to-r from-black/65 via-black/20 to-transparent"
-                              />
-
-                              <div className="relative z-10 mt-[120px] sm:mt-[155px] md:mt-[175px]">
-                                <BrassNameplate
-                                  lines={service.doorLabel}
-                                  isBright={isHardwareBright}
-                                />
-                              </div>
-
-                              <div className="absolute right-[10px] sm:right-[15px] top-[60%] z-10">
-                                <BrassHandleAndLock
-                                  isBright={isHardwareBright}
-                                  isHovered={isThisHovered}
-                                  isUnlatching={false}
-                                />
-                              </div>
-                            </div>
-
-                            <div
-                              className="absolute top-[15%] bottom-0 -right-[7px] w-[7px] pointer-events-none"
-                              style={{
-                                background: service.borderColor,
-                                transform: 'rotateY(90deg)',
-                                transformOrigin: 'left center'
+                                backgroundImage: `repeating-linear-gradient(
+                                  90deg,
+                                  rgba(255,255,255,0.045) 0px,
+                                  rgba(255,255,255,0.045) 3px,
+                                  rgba(0,0,0,0.26) 3px,
+                                  rgba(0,0,0,0.26) 6px,
+                                  transparent 6px,
+                                  transparent 9px
+                                )`
                               }}
                             />
-                          </motion.div>
 
-                          {/* Initial idle badge on Door 3 top-right arch */}
-                          <AnimatePresence>
-                            {!isAnyHovered &&
-                              phase === 'idle' &&
-                              index === 2 &&
-                              idleHintIndex === 2 && (
-                                <motion.div
-                                  initial={{ opacity: 0, scale: 0.88, y: -2 }}
-                                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                                  exit={{ opacity: 0, scale: 0.88, y: -2 }}
-                                  transition={{ duration: 0.35, ease: 'easeOut' }}
-                                  className="absolute top-[18px] right-[12px] z-30 px-3.5 py-1.5 rounded-full bg-[#b9b8b4]/80 backdrop-blur-md text-[#181818] text-[10.5px] font-medium tracking-tight shadow-lg pointer-events-none"
-                                >
-                                  Click to enter
-                                </motion.div>
-                              )}
-                          </AnimatePresence>
-
-                          {/* Active Hover "Click to enter" Badge */}
-                          <AnimatePresence>
-                            {isThisHovered && phase === 'idle' && (
-                              <motion.div
-                                initial={{ opacity: 0, scale: 0.86, y: 8 }}
-                                animate={{ opacity: 1, scale: 1, y: 0 }}
-                                exit={{ opacity: 0, scale: 0.88, y: 5 }}
-                                transition={{
-                                  type: 'spring',
-                                  stiffness: 280,
-                                  damping: 20
-                                }}
-                                className="absolute right-[18px] sm:right-[26px] top-[50%] z-30 px-4 py-1.5 rounded-full bg-[#f4f3ee] text-[#161514] text-[11px] font-semibold tracking-tight shadow-[0_8px_24px_rgba(0,0,0,0.5),0_0_15px_rgba(255,255,255,0.25)] pointer-events-none whitespace-nowrap"
-                              >
-                                Click to enter
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                        </div>
-
-                        <div className="absolute -bottom-[1px] -left-[4px] w-[14px] h-[16px] bg-[#2a2826] border border-[#171615]" />
-                        <div className="absolute -bottom-[1px] -right-[4px] w-[14px] h-[16px] bg-[#2a2826] border border-[#171615]" />
-                      </motion.div>
-
-                      {/* Mobile tap button */}
-                      <button
-                        onClick={() => handleDoorClick(index)}
-                        className="lg:hidden mt-2 mb-3 text-center group cursor-pointer"
-                      >
-                        <div className="text-[12px] font-semibold text-white/90">
-                          {service.title}
-                        </div>
-                        <div className="text-[10px] text-amber-200/75 flex items-center justify-center gap-1">
-                          <span>Tap to open door</span>
-                          <ArrowUpRight className="w-3 h-3" />
-                        </div>
-                      </button>
-                    </div>
-                  );
-                })}
-
-                {/* FLOATING SYNCHRONIZED SERVICE INFO PANEL */}
-                <AnimatePresence>
-                  {hoveredIndex !== null && phase === 'idle' && (
-                    <motion.div
-                      key={SERVICES[hoveredIndex].id}
-                      initial={{
-                        opacity: 0,
-                        x: hoveredIndex === 3 ? 20 : -20,
-                        y: 8,
-                        filter: 'blur(4px)'
-                      }}
-                      animate={{
-                        opacity: 1,
-                        x: 0,
-                        y: 0,
-                        filter: 'blur(0px)'
-                      }}
-                      exit={{
-                        opacity: 0,
-                        x: hoveredIndex === 3 ? 12 : -12,
-                        y: 4,
-                        filter: 'blur(3px)'
-                      }}
-                      transition={{
-                        duration: 0.38,
-                        ease: [0.16, 1, 0.3, 1]
-                      }}
-                      style={getInfoPanelPositionStyle(hoveredIndex)}
-                      className="hidden lg:block absolute top-[33%] z-30 w-[340px] pointer-events-none select-none"
-                    >
-                      <motion.h2
-                        initial={{ opacity: 0, y: 6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.05, duration: 0.3 }}
-                        className="text-[32px] font-bold tracking-[-0.025em] text-white leading-tight drop-shadow-md"
-                      >
-                        {SERVICES[hoveredIndex].title}
-                      </motion.h2>
-
-                      <motion.div
-                        initial={{ opacity: 0, y: 5 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.1, duration: 0.3 }}
-                        className="mt-1.5 text-[9.5px] font-semibold uppercase tracking-[0.18em] text-white/70"
-                      >
-                        {SERVICES[hoveredIndex].tagline}
-                      </motion.div>
-
-                      <ul className="mt-5 space-y-2.5">
-                        {SERVICES[hoveredIndex].features.map((feature, i) => (
-                          <motion.li
-                            key={feature}
-                            initial={{ opacity: 0, x: -10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{
-                              delay: 0.12 + i * 0.045,
-                              duration: 0.28,
-                              ease: 'easeOut'
-                            }}
-                            className="flex items-center gap-2.5 text-[13.5px] text-white/95 font-normal drop-shadow-sm"
-                          >
-                            <span
-                              className="w-[17px] h-[17px] rounded-full flex items-center justify-center shrink-0 shadow-sm"
-                              style={{
-                                backgroundColor: SERVICES[hoveredIndex].badgeBg,
-                                color: SERVICES[hoveredIndex].badgeText,
-                                boxShadow: `0 0 10px ${SERVICES[hoveredIndex].ambientGlow}`
+                            <motion.div
+                              animate={{
+                                opacity: isDoorHeldOpen
+                                  ? 0.55
+                                  : isThisHovered
+                                  ? 1
+                                  : isHardwareBright
+                                  ? 0.75
+                                  : 0.35
                               }}
-                            >
-                              <Check className="w-[10px] h-[10px]" strokeWidth={3.4} />
-                            </span>
-                            <span>{feature}</span>
-                          </motion.li>
-                        ))}
-                      </ul>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            </div>
+                              transition={{ duration: 0.6 }}
+                              className="absolute inset-0 pointer-events-none"
+                              style={{
+                                background:
+                                  'radial-gradient(ellipse 90% 55% at 50% 22%, rgba(255,246,220,0.22) 0%, transparent 72%)'
+                              }}
+                            />
 
-            {/* BASEBOARD MOULDING */}
-            <div className="relative z-20 w-full">
-              <div
-                className="w-full h-[22px] sm:h-[26px]"
-                style={{
-                  background:
-                    'linear-gradient(180deg, #353330 0%, #252422 35%, #1c1b19 85%, #121110 100%)',
-                  borderTop: '1px solid rgba(255,255,255,0.08)',
-                  boxShadow: '0 -4px 16px rgba(0,0,0,0.65)'
-                }}
-              />
-              <div className="w-full h-[14px] bg-[#11100f]" />
+                            <motion.div
+                              animate={{
+                                opacity: isDoorHeldOpen ? 0.35 : 0
+                              }}
+                              transition={{ duration: 0.9 }}
+                              className="absolute inset-0 pointer-events-none bg-gradient-to-r from-black/65 via-black/20 to-transparent"
+                            />
+
+                            <div className="relative z-10 mt-[120px] sm:mt-[155px] md:mt-[175px]">
+                              <BrassNameplate
+                                lines={service.doorLabel}
+                                isBright={isHardwareBright}
+                              />
+                            </div>
+
+                            <div className="absolute right-[10px] sm:right-[15px] top-[60%] z-10">
+                              <BrassHandleAndLock
+                                isBright={isHardwareBright}
+                                isHovered={isThisHovered}
+                                isUnlatching={isUnlatching}
+                              />
+                            </div>
+                          </div>
+
+                          <div
+                            className="absolute top-[15%] bottom-0 -right-[7px] w-[7px] pointer-events-none"
+                            style={{
+                              background: service.borderColor,
+                              transform: 'rotateY(90deg)',
+                              transformOrigin: 'left center'
+                            }}
+                          />
+                        </motion.div>
+
+                        {/* Active Hover "Click to enter" Badge (Horizontally Centered, only on hovered door) */}
+                        <AnimatePresence>
+                          {isThisHovered && phase === 'idle' && (
+                            <motion.div
+                              initial={{ opacity: 0, scale: 0.86, y: 8 }}
+                              animate={{ opacity: 1, scale: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.88, y: 5 }}
+                              transition={{
+                                type: 'spring',
+                                stiffness: 280,
+                                damping: 20
+                              }}
+                              className="absolute left-1/2 -translate-x-1/2 top-[52%] z-30 px-4 py-1.5 rounded-full bg-[#f4f3ee] text-[#161514] text-[11px] font-semibold tracking-tight shadow-[0_8px_24px_rgba(0,0,0,0.5),0_0_15px_rgba(255,255,255,0.25)] pointer-events-none whitespace-nowrap"
+                            >
+                              Click to enter
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+
+                      <div className="absolute -bottom-[1px] -left-[4px] w-[14px] h-[16px] bg-[#2a2826] border border-[#171615]" />
+                      <div className="absolute -bottom-[1px] -right-[4px] w-[14px] h-[16px] bg-[#2a2826] border border-[#171615]" />
+                    </div>
+
+                    {/* Mobile tap button */}
+                    <button
+                      onClick={() => handleDoorClick(index)}
+                      disabled={phase !== 'idle'}
+                      className="lg:hidden mt-2 mb-3 text-center group cursor-pointer disabled:cursor-default"
+                    >
+                      <div className="text-[12px] font-semibold text-white/90">
+                        {service.title}
+                      </div>
+                      <div className="text-[10px] text-amber-200/75 flex items-center justify-center gap-1">
+                        <span>Tap to open door</span>
+                        <ArrowUpRight className="w-3 h-3" />
+                      </div>
+                    </button>
+                  </div>
+                );
+              })}
+
+              {/* FLOATING SYNCHRONIZED SERVICE INFO PANEL */}
+              <AnimatePresence>
+                {hoveredIndex !== null && phase === 'idle' && SERVICES[hoveredIndex] && (
+                  <motion.div
+                    key={SERVICES[hoveredIndex].id}
+                    initial={{
+                      opacity: 0,
+                      x: hoveredIndex === 3 ? 20 : -20,
+                      y: 8,
+                      filter: 'blur(4px)'
+                    }}
+                    animate={{
+                      opacity: 1,
+                      x: 0,
+                      y: 0,
+                      filter: 'blur(0px)'
+                    }}
+                    exit={{
+                      opacity: 0,
+                      x: hoveredIndex === 3 ? 12 : -12,
+                      y: 4,
+                      filter: 'blur(3px)'
+                    }}
+                    transition={{
+                      duration: 0.38,
+                      ease: [0.16, 1, 0.3, 1]
+                    }}
+                    style={getInfoPanelPositionStyle(hoveredIndex)}
+                    className="hidden lg:block absolute top-[33%] z-30 w-[340px] pointer-events-none select-none"
+                  >
+                    <motion.h2
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.05, duration: 0.3 }}
+                      className="text-[32px] font-bold tracking-[-0.025em] text-white leading-tight drop-shadow-md"
+                    >
+                      {SERVICES[hoveredIndex]?.title}
+                    </motion.h2>
+
+                    <motion.div
+                      initial={{ opacity: 0, y: 5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.1, duration: 0.3 }}
+                      className="mt-1.5 text-[9.5px] font-semibold uppercase tracking-[0.18em] text-white/70"
+                    >
+                      {SERVICES[hoveredIndex]?.tagline}
+                    </motion.div>
+
+                    <ul className="mt-5 space-y-2.5">
+                      {SERVICES[hoveredIndex]?.features.map((feature, i) => (
+                        <motion.li
+                          key={feature}
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{
+                            delay: 0.12 + i * 0.045,
+                            duration: 0.28,
+                            ease: 'easeOut'
+                          }}
+                          className="flex items-center gap-2.5 text-[13.5px] text-white/95 font-normal drop-shadow-sm"
+                        >
+                          <span
+                            className="w-[17px] h-[17px] rounded-full flex items-center justify-center shrink-0 shadow-sm"
+                            style={{
+                              backgroundColor: SERVICES[hoveredIndex]?.badgeBg,
+                              color: SERVICES[hoveredIndex]?.badgeText,
+                              boxShadow: `0 0 10px ${SERVICES[hoveredIndex]?.ambientGlow}`
+                            }}
+                          >
+                            <Check className="w-[10px] h-[10px]" strokeWidth={3.4} />
+                          </span>
+                          <span>{feature}</span>
+                        </motion.li>
+                      ))}
+                    </ul>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
-          </motion.section>
+          </div>
+
+          {/* BASEBOARD MOULDING: Fixed to bottom edge of 100dvh viewport */}
+          <div className="relative z-20 w-full pointer-events-none">
+            <div
+              className="w-full h-[20px] sm:h-[24px]"
+              style={{
+                background:
+                  'linear-gradient(180deg, #353330 0%, #252422 35%, #1c1b19 85%, #121110 100%)',
+                borderTop: '1px solid rgba(255,255,255,0.08)',
+                boxShadow: '0 -4px 16px rgba(0,0,0,0.65)'
+              }}
+            />
+            <div className="w-full h-[12px] bg-[#11100f]" />
+          </div>
+        </motion.div>
+      </section>
+
+      {/* 2. DEDICATED SERVICE PAGE OVERLAY: Mounted during phase === 'page' */}
+      <AnimatePresence>
+        {phase === 'page' && selectedDoorIndex !== null && (
+          <motion.div
+            key="service-page-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.35, ease: 'easeInOut' }}
+            className="fixed inset-0 z-40 bg-[#181817] pointer-events-auto"
+          >
+            <DedicatedServicePage
+              service={SERVICES[selectedDoorIndex]}
+              onBack={handleBackToDoors}
+              onSelectOtherService={handleSwitchServiceDirectly}
+            />
+          </motion.div>
         )}
       </AnimatePresence>
+
+      {/* 3. FULL-VIEWPORT BLACK TRANSITION VEIL: Clean fade with no abrupt display cuts (Section 2 & 5) */}
+      <motion.div
+        initial={false}
+        animate={{
+          opacity: veilOpacity
+        }}
+        transition={{
+          duration: veilOpacity === 1 ? 0.32 : 0.28,
+          ease: 'easeInOut'
+        }}
+        className="fixed inset-0 bg-black z-[9999] pointer-events-none"
+      />
     </div>
   );
-}
+});
+
+export default DoorsSection;

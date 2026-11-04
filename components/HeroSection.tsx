@@ -5,10 +5,7 @@ import InkReveal from '@/components/ui/ink-reveal';
 import { 
   ArrowRight, 
   ArrowDown, 
-  Upload, 
-  Sparkles,
   X,
-  Menu
 } from 'lucide-react';
 
 // ============================================================================
@@ -119,51 +116,9 @@ export default function HeroSection({
   const [isFlipping, setIsFlipping] = useState(false);
   const [isCalendarPaused, setIsCalendarPaused] = useState(false);
 
-  // Character Cursor Hover Color Reveal State
+  // Character Hover & Image State
   const [isCharHovered, setIsCharHovered] = useState(false);
-  const [customCharImg, setCustomCharImg] = useState<string | null>('/hero.png');
-  const charContainerRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Synchronous, zero-latency cursor position update for precise color reveal flow
-  const updateCursorPosition = (clientX: number, clientY: number) => {
-    if (!charContainerRef.current) return;
-    const rect = charContainerRef.current.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const y = clientY - rect.top;
-    charContainerRef.current.style.setProperty('--mouse-x', `${x}px`);
-    charContainerRef.current.style.setProperty('--mouse-y', `${y}px`);
-  };
-
-  const handleCharacterMouseEnter = (e: React.MouseEvent<HTMLDivElement>) => {
-    updateCursorPosition(e.clientX, e.clientY);
-    setIsCharHovered(true);
-  };
-
-  const handleCharacterMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    updateCursorPosition(e.clientX, e.clientY);
-    if (!isCharHovered) setIsCharHovered(true);
-  };
-
-  const handleCharacterMouseLeave = () => {
-    setIsCharHovered(false);
-  };
-
-  const handleCharacterTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (!e.touches[0]) return;
-    updateCursorPosition(e.touches[0].clientX, e.touches[0].clientY);
-    setIsCharHovered(true);
-  };
-
-  const handleCharacterTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (!e.touches[0]) return;
-    updateCursorPosition(e.touches[0].clientX, e.touches[0].clientY);
-    setIsCharHovered(true);
-  };
-
-  const handleCharacterTouchEnd = () => {
-    setIsCharHovered(false);
-  };
+  const [customCharImg] = useState<string | null>('/hero.png');
 
   // Modals
   const [contactModalOpen, setContactModalOpen] = useState(false);
@@ -204,15 +159,6 @@ export default function HeroSection({
     setTimeout(() => {
       setIsPulling(false);
     }, 450);
-  };
-
-  // Handle user uploading their own transparent PNG character image
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const url = URL.createObjectURL(file);
-      setCustomCharImg(url);
-    }
   };
 
 
@@ -497,6 +443,8 @@ export default function HeroSection({
           
           {/* Character Interactive Container with Ink Reveal */}
           <div
+            onMouseEnter={() => setIsCharHovered(true)}
+            onMouseLeave={() => setIsCharHovered(false)}
             className="relative w-[340px] sm:w-[440px] md:w-[490px] xl:w-[540px] 2xl:w-[580px] h-[450px] sm:h-[550px] md:h-[610px] xl:h-[660px] 2xl:h-[700px] flex items-end justify-center select-none"
           >
             {/* 1. UNDERNEATH: Full-Color Vibrant Portrait */}

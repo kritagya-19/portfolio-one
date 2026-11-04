@@ -38,19 +38,20 @@ export default function Navbar({
   onOpenContact,
 }: NavbarProps) {
   const isDark = theme === 'dark';
-  const [activeNav, setActiveNav] = useState<NavItem>('Home');
+  const [scrollSpyNav, setScrollSpyNav] = useState<NavItem>('Home');
   const [navHoveredItem, setNavHoveredItem] = useState<NavItem | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Synchronize activeNav when on a dedicated service page
-  useEffect(() => {
-    if (activeServiceId) {
-      if (activeServiceId === 'web-development') setActiveNav('Web Development');
-      else if (activeServiceId === 'app-development') setActiveNav('App Development');
-      else if (activeServiceId === 'ui-ux-design') setActiveNav('UI/UX Design');
-      else if (activeServiceId === 'graphic-design') setActiveNav('Graphic Design');
-    }
+  // Derive active item from activeServiceId or scroll-spy state
+  const activeServiceNav = React.useMemo<NavItem | null>(() => {
+    if (activeServiceId === 'web-development') return 'Web Development';
+    if (activeServiceId === 'app-development') return 'App Development';
+    if (activeServiceId === 'ui-ux-design') return 'UI/UX Design';
+    if (activeServiceId === 'graphic-design') return 'Graphic Design';
+    return null;
   }, [activeServiceId]);
+
+  const activeNav = activeServiceNav || scrollSpyNav;
 
   // Scroll spy on home page when no dedicated service is open
   useEffect(() => {
@@ -65,7 +66,7 @@ export default function Navbar({
       if (contactEl) {
         const contactTop = contactEl.offsetTop - 300;
         if (scrollY >= contactTop) {
-          setActiveNav('Contact');
+          setScrollSpyNav('Contact');
           return;
         }
       }
@@ -74,13 +75,13 @@ export default function Navbar({
         const storyTop = storyEl.offsetTop - 260;
         const storyBottom = storyTop + storyEl.offsetHeight;
         if (scrollY >= storyTop && scrollY < storyBottom) {
-          setActiveNav('My story');
+          setScrollSpyNav('My story');
           return;
         }
       }
 
       if (scrollY < 500) {
-        setActiveNav('Home');
+        setScrollSpyNav('Home');
       }
     };
 
@@ -91,7 +92,7 @@ export default function Navbar({
 
   const handleItemClick = (item: NavItem) => {
     setMobileMenuOpen(false);
-    setActiveNav(item);
+    setScrollSpyNav(item);
 
     if (item === 'Contact') {
       if (onOpenContact) {

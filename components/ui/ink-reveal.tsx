@@ -70,45 +70,45 @@ export default function InkReveal({
 
   const mc = maskColor;
 
-  // Preload mask image if provided
-  useEffect(() => {
-    if (!maskImageSrc) {
-      imgRef.current = null;
-      imgLoadedRef.current = false;
-      return;
-    }
+  const carveInk = useCallback(
+    (
+      ctx: CanvasRenderingContext2D,
+      x: number,
+      y: number,
+      r: number,
+      seed: number,
+      alpha: number
+    ) => {
+      const g = ctx.createRadialGradient(
+        x,
+        y,
+        r * gradientInnerRadius,
+        x,
+        y,
+        r
+      );
+      g.addColorStop(0, `rgba(0,0,0,${gradientStops[0] * alpha})`);
+      g.addColorStop(0.5, `rgba(0,0,0,${gradientStops[1] * alpha})`);
+      g.addColorStop(1, `rgba(0,0,0,${gradientStops[2] * alpha})`);
+      ctx.fillStyle = g;
 
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.src = maskImageSrc;
-    img.onload = () => {
-      imgRef.current = img;
-      imgLoadedRef.current = true;
-      drawFrame();
-    };
-  }, [maskImageSrc]);
-
-  const resize = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const parent = canvas.parentElement;
-    if (!parent) return;
-
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const rect = parent.getBoundingClientRect();
-    const w = rect.width;
-    const h = rect.height;
-    dimsRef.current = { w, h };
-    canvas.width = Math.round(w * dpr);
-    canvas.height = Math.round(h * dpr);
-    canvas.style.width = `${w}px`;
-    canvas.style.height = `${h}px`;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-    drawFrame();
-  }, [mc]);
+      ctx.beginPath();
+      for (let i = 0; i <= segments; i++) {
+        const a = (i / segments) * Math.PI * 2;
+        const wob =
+          0.78 +
+          wobble[0] * Math.sin(a * 3 + seed) +
+          wobble[1] * Math.sin(a * 5 + seed * 2.1) +
+          wobble[2] * Math.sin(a * 7 + seed * 0.7);
+        const px = x + Math.cos(a) * r * wob;
+        const py = y + Math.sin(a) * r * wob;
+        i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fill();
+    },
+    [segments, wobble, gradientInnerRadius, gradientStops]
+  );
 
   const drawBaseLayer = useCallback(
     (ctx: CanvasRenderingContext2D, w: number, h: number) => {
@@ -151,80 +151,6 @@ export default function InkReveal({
       }
     },
     [maskImageSrc, grayscaleFilter, mc]
-  );
-
-  const carveInk = useCallback(
-    (
-      ctx: CanvasRenderingContext2D,
-      x: number,
-      y: number,
-      r: number,
-      seed: number,
-      alpha: number
-    ) => {
-      const g = ctx.createRadialGradient(
-        x,
-        y,
-        r * gradientInnerRadius,
-        x,
-        y,
-        r
-      );
-      g.addColorStop(0, `rgba(0,0,0,${gradientStops[0] * alpha})`);
-      g.addColorStop(0.5, `rgba(0,0,0,${gradientStops[1] * alpha})`);
-      g.addColorStop(1, `rgba(0,0,0,${gradientStops[2] * alpha})`);
-      ctx.fillStyle = g;
-
-      ctx.beginPath();
-      for (let i = 0; i <= segments; i++) {
-        const a = (i / segments) * Math.PI * 2;
-        const wob =
-          0.78 +
-          wobble[0] * Math.sin(a * 3 + seed) +
-          wobble[1] * Math.sin(a * 5 + seed * 2.1) +
-          wobble[2] * Math.sin(a * 7 + seed * 0.7);
-        const px = x + Math.cos(a) * r * wob;
-        const py = y + Math.sin(a) * r * wob;
-        i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
-      }
-      ctx.closePath();
-      ctx.fill();
-    },
-    [segments, wobble, gradientInnerRadius, gradientStops]
-  );
-
-  const addStamp = useCallback(
-    (x: number, y: number) => {
-      const stamps = stampsRef.current;
-      if (stamps.length >= maxStamps) stamps.shift();
-      stamps.push({
-        x,
-        y,
-        born: performance.now(),
-        seed: Math.random() * Math.PI * 2,
-        rmax: brushSize * (1 - rVary + Math.random() * rVary),
-      });
-    },
-    [brushSize, rVary, maxStamps]
-  );
-
-  const stampAlong = useCallback(
-    (x: number, y: number) => {
-      const last = lastPosRef.current;
-      if (!last) {
-        addStamp(x, y);
-      } else {
-        const dx = x - last.x;
-        const dy = y - last.y;
-        const dist = Math.hypot(dx, dy);
-        const steps = Math.max(1, Math.ceil(dist / stampStep));
-        for (let i = 1; i <= steps; i++) {
-          addStamp(last.x + (dx * i) / steps, last.y + (dy * i) / steps);
-        }
-      }
-      lastPosRef.current = { x, y };
-    },
-    [addStamp, stampStep]
   );
 
   const drawFrame = useCallback(() => {
@@ -277,6 +203,80 @@ export default function InkReveal({
       requestAnimationFrame(() => loopRef.current());
     }
   }, []);
+
+  const resize = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const parent = canvas.parentElement;
+    if (!parent) return;
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const rect = parent.getBoundingClientRect();
+    const w = rect.width;
+    const h = rect.height;
+    dimsRef.current = { w, h };
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    canvas.style.width = `${w}px`;
+    canvas.style.height = `${h}px`;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    drawFrame();
+  }, [drawFrame]);
+
+  // Preload mask image if provided
+  useEffect(() => {
+    if (!maskImageSrc) {
+      imgRef.current = null;
+      imgLoadedRef.current = false;
+      return;
+    }
+
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.src = maskImageSrc;
+    img.onload = () => {
+      imgRef.current = img;
+      imgLoadedRef.current = true;
+      drawFrame();
+    };
+  }, [maskImageSrc, drawFrame]);
+
+  const addStamp = useCallback(
+    (x: number, y: number) => {
+      const stamps = stampsRef.current;
+      if (stamps.length >= maxStamps) stamps.shift();
+      stamps.push({
+        x,
+        y,
+        born: performance.now(),
+        seed: Math.random() * Math.PI * 2,
+        rmax: brushSize * (1 - rVary + Math.random() * rVary),
+      });
+    },
+    [brushSize, rVary, maxStamps]
+  );
+
+  const stampAlong = useCallback(
+    (x: number, y: number) => {
+      const last = lastPosRef.current;
+      if (!last) {
+        addStamp(x, y);
+      } else {
+        const dx = x - last.x;
+        const dy = y - last.y;
+        const dist = Math.hypot(dx, dy);
+        const steps = Math.max(1, Math.ceil(dist / stampStep));
+        for (let i = 1; i <= steps; i++) {
+          addStamp(last.x + (dx * i) / steps, last.y + (dy * i) / steps);
+        }
+      }
+      lastPosRef.current = { x, y };
+    },
+    [addStamp, stampStep]
+  );
 
   useEffect(() => {
     resize();
